@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The 15-Minute Suburb | Interactive Dashboard</title>
+    
+    <script src="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@3.x/dist/maplibre-gl.css" rel="stylesheet" />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: #fff; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Sidebar Styling */
+        #sidebar {
+            position: absolute; top: 20px; left: 20px; width: 320px;
+            background: rgba(26, 26, 26, 0.95);
+            padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid #333; z-index: 1;
+        }
+        h1 { margin: 0 0 5px 0; font-size: 20px; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }
+        p { font-size: 13px; color: #aaa; margin-bottom: 20px; }
+        
+        /* Toggles */
+        .toggle-container { margin-bottom: 15px; }
+        .toggle-row { display: flex; align-items: center; margin-bottom: 8px; }
+        .toggle-row input { margin-right: 10px; cursor: pointer; }
+        
+        /* Legend */
+        .legend { margin-top: 20px; padding-top: 15px; border-top: 1px solid #444; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; font-size: 13px;}
+        .color-box { width: 15px; height: 15px; margin-right: 10px; border-radius: 3px; }
+        
+        /* Custom Popup */
+        .maplibregl-popup-content {
+            background-color: #1a1a1a; color: #fff; border: 1px solid #00ffcc;
+            font-family: 'Segoe UI', sans-serif; border-radius: 5px; padding: 15px;
+        }
+        .maplibregl-popup-tip { border-top-color: #00ffcc !important; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="sidebar">
+    <h1>THE 15-MINUTE SUBURB</h1>
+    <p>Mapping Service Deserts across Darebin, Banyule, and Nillumbik.</p>
+    
+    <div class="toggle-container">
+        <h3>Filter by Essential Services:</h3>
+        <div class="toggle-row">
+            <input type="checkbox" id="toggle-highschool" class="amenity-toggle" value="highschool">
+            <label for="toggle-highschool">High School</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="toggle-hospital" class="amenity-toggle" value="hospital">
+            <label for="toggle-hospital">Hospital</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="toggle-uni" class="amenity-toggle" value="uni">
+            <label for="toggle-uni">University</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="toggle-train" class="amenity-toggle" value="train">
+            <label for="toggle-train">Train Station</label>
+        </div>
+        <div class="toggle-row">
+            <input type="checkbox" id="toggle-pharmacy" class="amenity-toggle" value="pharmacy">
+            <label for="toggle-pharmacy">Pharmacy</label>
+        </div>
+    </div>
+
+    <div class="legend">
+        <strong>Total Livability Score</strong>
+        <div class="legend-item"><div class="color-box" style="background: #edf8fb;"></div>0 - Service Desert</div>
+        <div class="legend-item"><div class="color-box" style="background: #b2e2e2;"></div>1 - 2 Amenities</div>
+        <div class="legend-item"><div class="color-box" style="background: #66c2a4;"></div>3 - 4 Amenities</div>
+        <div class="legend-item"><div class="color-box" style="background: #2ca25f;"></div>5 Amenities</div>
+        <div class="legend-item"><div class="color-box" style="background: #006d2c;"></div>6+ Highly Connected</div>
+    </div>
+</div>
+
+<script>
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', 
+        center: [145.01, -37.73], // Centered directly on Darebin
+        zoom: 12
+    });
+
+    // Error catcher
+    map.on('error', function(e) {
+        if (e && e.error && e.error.message) {
+            console.error(e.error.message);
+            alert("Map Error: " + e.error.message);
+        }
+    });
+
+    map.on('load', () => {
+        // Load ONLY the Darebin file for now
+        map.addSource('suburbs', {
+            type: 'geojson',
+            data: 'Darebin.geojson'
+        });
+
+        map.addLayer({
+            'id': 'properties-layer',
+            'type': 'fill',
+            'source': 'suburbs',
+            'paint': {
+                'fill-color': [
+                    'step',
+                    ['to-number', ['get', 'total_score']], 
+                    '#edf8fb', 
+                    1, '#b2e2e2',
+                    3, '#66c2a4',
+                    5, '#2ca25f',
+                    6, '#006d2c'
+                ],
+                'fill-opacity': 0.7
+            }
+        });
+
+        // Hover Popup
+        const popup = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false
+        });
+
+        map.on('mousemove', 'properties-layer', (e) => {
+            map.getCanvas().style.cursor = 'pointer';
+            const props = e.features[0].properties;
+            
+            const popupHTML = `
+                <div style="font-size: 14px;">
+                    <strong style="color: #00ffcc; font-size: 16px;">Total Score: ${props.total_score || 0}</strong><br><hr style="border-color:#333;">
+                    🎓 Uni: ${props.uni || 0}<br>
+                    💊 Pharmacy: ${props.pharmacy || 0}<br>
+                    🚆 Train: ${props.train || 0}<br>
+                    🏥 Hospital: ${props.hospital || 0}<br>
+                    🏫 High School: ${props.highschool || 0}
+                </div>
+            `;
+            
+            popup.setLngLat(e.lngLat).setHTML(popupHTML).addTo(map);
+        });
+
+        map.on('mouseleave', 'properties-layer', () => {
+            map.getCanvas().style.cursor = '';
+            popup.remove();
+        });
+
+        // Toggle Logic
+        const toggles = document.querySelectorAll('.amenity-toggle');
+        toggles.forEach(toggle => {
+            toggle.addEventListener('change', updateFilters);
+        });
+
+        function updateFilters() {
+            const activeFilters = ['all'];
+            
+            toggles.forEach(toggle => {
+                if (toggle.checked) {
+                    activeFilters.push(['==', ['to-number', ['get', toggle.value]], 1]);
+                }
+            });
+
+            if (activeFilters.length === 1) {
+                map.setFilter('properties-layer', null);
+            } else {
+                map.setFilter('properties-layer', activeFilters);
+            }
+        }
+    });
+</script>
+
+</body>
+</html>
